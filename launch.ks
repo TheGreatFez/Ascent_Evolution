@@ -27,7 +27,7 @@ when maxthrust < MAX OR availablethrust = 0 then {
 }
 
 // Pitch Steps
-wait until altitude > 100.
+wait until altitude > 5000.
 set pitch to 75.
 print "Pitch is now " + pitch.
 
