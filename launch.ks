@@ -14,7 +14,6 @@ local pitch to 90.
 lock throttle to 1.
 lock steering to heading(90,pitch).
 stage.
-print "Pitch is now " + pitch.
 
 // Basic Staging:
 local MAX to maxthrust.
@@ -26,29 +25,15 @@ when maxthrust < MAX OR availablethrust = 0 then {
 	preserve.
 }
 
-// Pitch Steps
-wait until altitude > 5000.
-set pitch to 75.
-print "Pitch is now " + pitch.
+// Pitch Loop
+local switch_alt is 5000.
 
-wait until altitude > 10000.
-set pitch to 60.
-print "Pitch is now " + pitch.
-
-wait until altitude > 15000.
-set pitch to 45.
-print "Pitch is now " + pitch.
-
-wait until altitude > 20000.
-set pitch to 30.
-print "Pitch is now " + pitch.
-
-wait until altitude > 25000.
-set pitch to 15.
-print "Pitch is now " + pitch.
-
-wait until altitude > 30000.
-set pitch to 0.
-print "Pitch is now " + pitch.
-
-wait until apoapsis >= TargetOrbit.
+until apoapsis > TargetOrbit {
+	if pitch > 0 {
+		if altitude > switch_alt {
+			set switch_alt to switch_alt + 5000.
+			set pitch to pitch - 15.
+		}
+	}
+	print "Pitch = " + pitch + "   " at(0,1).
+}
