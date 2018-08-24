@@ -16,12 +16,12 @@ lock steering to heading(90,pitch).
 stage.
 
 // Basic Staging:
-local MAX to maxthrust.
-when maxthrust < MAX OR availablethrust = 0 then {
+local current_max to maxthrust.
+when maxthrust < current_max OR availablethrust = 0 then {
 	lock throttle to 0.
 	stage.
 	lock throttle to 1.
-	set MAX to maxthrust.
+	set current_max to maxthrust.
 	preserve.
 }
 
