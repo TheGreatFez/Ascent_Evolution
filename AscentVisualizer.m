@@ -1,12 +1,9 @@
 X = linspace(0,70000,1000)';
-pitch = 90;
 switch_alt = 5000;
+end_alt    = 40000;
 for iX =1:length(X)
-    if X(iX) > switch_alt && pitch > 0
-        switch_alt = switch_alt + 5000;
-        pitch = pitch - 15;
-    end
-    Y(iX,1) = pitch;    
+    
+    Y(iX,1) = max(0,min(90,90 - (90/(end_alt - switch_alt))*(X(iX) - switch_alt)));    
 end
 
 plot(X,Y)

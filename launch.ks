@@ -27,13 +27,9 @@ when maxthrust < MAX OR availablethrust = 0 then {
 
 // Pitch Loop
 local switch_alt is 5000.
+local end_alt is 30000.
 
 until apoapsis > TargetOrbit {
-	if pitch > 0 {
-		if altitude > switch_alt {
-			set switch_alt to switch_alt + 5000.
-			set pitch to pitch - 15.
-		}
-	}
+	set pitch to max(0,min(90,90 - (90/(end_alt - switch_alt))*(altitude - switch_alt))).
 	print "Pitch = " + pitch + "   " at(0,1).
 }
