@@ -25,11 +25,29 @@ when maxthrust < current_max OR availablethrust = 0 then {
 	preserve.
 }
 
-// Pitch Loop
-local switch_alt is 5000.
-local end_alt is 30000.
+// Gravity Turn Parameters
+local switch_alt is 250.
+local pitch_over_ang is 15.
+local pitch_hold_time is 5.
+local gravity_turn is false.
 
 until apoapsis > TargetOrbit {
-	set pitch to max(0,min(90,90 - (90/(end_alt - switch_alt))*(altitude - switch_alt))).
-	print "Pitch = " + pitch + "   " at(0,1).
+	if altitude > switch_alt AND not(gravity_turn) {
+		set pitch to pitch - pitch_over_ang.
+		wait pitch_hold_time.
+		lock steering to srfprograde.
+		set gravity_turn to true.
+	}
+	local line is 1.
+	print "Pitch        = " + pitch + "   " at(0,line).
+	set line to line + 1.
+	print "gravity_turn = " + gravity_turn + "   " at(0,line).
+	set line to line + 1.
+	print "altitude     = " + round(altitude,2) + "   " at(0,line).
+	set line to line + 1.
+	print "switch_alt   = " + switch_alt + "   " at(0,line).
+	set line to line + 1.
+	print "apoapsis     = " + round(apoapsis,2) + "   " at(0,line).
+	set line to line + 1.
+	print "TargetOrbit  = " + TargetOrbit + "   " at(0,line).
 }
