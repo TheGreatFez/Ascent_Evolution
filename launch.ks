@@ -27,8 +27,8 @@ when maxthrust < current_max OR availablethrust = 0 then {
 
 // Gravity Turn Parameters
 local switch_alt is 250.
-local pitch_over_ang is 15.
-local pitch_hold_time is 5.
+local pitch_over_ang is 3.
+local pitch_hold_time is 2.
 local gravity_turn is false.
 
 until apoapsis > TargetOrbit {
