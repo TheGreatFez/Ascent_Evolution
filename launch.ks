@@ -55,19 +55,14 @@ local ThrottleStage is 1.
 
 // Delta V Variables
 local DeltaV_total is 0.
-local grav_loss is 0.
-local turn_loss is 0.
 local DeltaV_gain is 0.
-local obt_vec1 is ship:velocity:orbit.
-local accel_1 is 0.
-local obt_vec2 is ship:velocity:orbit.
-local accel_2 is 0.
-local time1 is 0.
-local time2 is 0.
+local time1 is time:seconds.
+local time2 is time:seconds.
 local dt is 0.00001.
-local g is body:mu/(body:position:mag^2).
-local g_vec to UP:vector.
-
+local thrust_accel_1 is throttle*availablethrust/mass.
+local thrust_accel_2 is throttle*availablethrust/mass.
+local a_vec1 is throttle*ship:sensors:acc.
+local a_vec2 is throttle*ship:sensors:acc.
 
 until AscentStage = 3 AND altitude > ship:body:ATM:height {
 	// Run Mode Logic
@@ -85,10 +80,6 @@ until AscentStage = 3 AND altitude > ship:body:ATM:height {
 	// Pitch Program 
 	set pitch_ang to PitchProgram(AscentStage,switch_alt).
 	
-	// Delta V Calculations Step 1
-	set accel_1 to throttle*availablethrust/mass.
-	set obt_vec1 to ship:velocity:orbit.
-	set time1 to time:seconds.
 	
 	// Variable Printout
 	local line is 1.
@@ -105,42 +96,35 @@ until AscentStage = 3 AND altitude > ship:body:ATM:height {
 	print "apoapsis      = " + round(apoapsis) + "   " at(0,line).
 	set line to line + 1.
 	print "TargetOrbit   = " + TargetOrbit + "   " at(0,line).
-	wait 0.
 	
-	// Delta V Calculations Step 2
-	set accel_2 to throttle*availablethrust/mass.
-	set obt_vec2 to ship:velocity:orbit.
+	
+	// Delta V Calculations
+	set thrust_accel_2 to throttle*availablethrust/mass.
+	set a_vec2 to throttle*ship:sensors:acc.
 	set time2 to time:seconds.
 	set dt to time2 - time1.
-	set accel to (accel_1 + accel_2)/2.
-	set DeltaV_total to DeltaV_total + accel*dt.
-	set accel_vec to (obt_vec2 - obt_vec1)/dt.
-	set g to body:mu/(body:position:mag^2).
-	set g_vec to -UP:vector*g.
-	set thrust_vec to accel*ship:facing:vector.
-	set obt_vel_norm to obt_vec2:normalized.
-	set grav_loss to grav_loss + dt*(VDOT(obt_vel_norm,g_vec))*throttle.
-	local turn_vec to VCRS(VCRS(obt_vel_norm,ship:facing:vector),obt_vel_norm):normalized.
-	set turn_loss to turn_loss - dt*(VDOT(turn_vec,thrust_vec + g_vec)).
-	set DeltaV_gain to DeltaV_gain + dt*(VDOT(obt_vel_norm,accel_vec)).
-	set aero_loss to -1*(DeltaV_total - DeltaV_gain + turn_loss + grav_loss).	
+	local thrust_accel to (thrust_accel_1 + thrust_accel_2)/2.
+	local a_vec to (a_vec1 + a_vec2)/2.
+	set thrust_vec to thrust_accel*ship:facing:vector.
+	set DeltaV_total to DeltaV_total + thrust_accel*dt.
+	local obt_vel_norm to ship:velocity:orbit:normalized.
+	set DeltaV_Gain to DeltaV_gain + dt*(VDOT(obt_vel_norm,a_vec)).
+	local DeltaV_Losses to DeltaV_total - DeltaV_gain.
+	local DeltaV_Eff to 100*DeltaV_Gain/DeltaV_total.
+	
+	set thrust_accel_1 to thrust_accel_2.
+	set a_vec1 to a_vec2.
+	set time1 to time2.
 	
 	// Delta V Printout
 	set line to line + 3.
-	print "DeltaV_gain   = " + round(DeltaV_gain) + "   " at(0,line).
-	set line to line + 1.
-	print "turn_loss     = " + round(turn_loss) + "   " at(0,line).
-	set line to line + 1.
-	print "aero_loss     = " + round(aero_loss) + "   " at(0,line).
-	set line to line + 1.
-	print "grav_loss     = " + round(grav_loss) + "   " at(0,line).
-	set line to line + 1.
 	print "DeltaV_total  = " + round(DeltaV_total) + "   " at(0,line).
 	set line to line + 1.
-	print "g             = " + round(g,2) + "   " at(0,line).
+	print "DeltaV_gain   = " + round(DeltaV_gain) + "   " at(0,line).
 	set line to line + 1.
-	print "acceleration  = " + round(accel,2) + "   " at(0,line).
+	print "DeltaV_Losses = " + round(DeltaV_Losses) + "   " at(0,line).
 	set line to line + 1.
-	print "dt            = " + round(dt,4) + "   " at(0,line).
+	print "DeltaV_Eff    = " + round(DeltaV_Eff) + "%   " at(0,line).
 	
+	wait 0.
 }
