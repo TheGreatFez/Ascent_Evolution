@@ -11,8 +11,8 @@ local TargetOrbit is 150000. // The target altitude of our parking orbit.
 
 // Functions
 
-function PitchProgram {
-	parameter AscentStage, switch_alt is 250.
+function PitchProgram_Sqrt {
+	parameter InputData, switch_alt is 250.
 	local pitch_ang to 90.
 	local FollowPitch to true.
 	local scale_factor to 1.0.
@@ -31,6 +31,59 @@ function PitchProgram {
 	}
 	
 	return pitch_ang.
+}
+
+function PitchProgram_Rate {
+	parameter Pitch_Data.
+	local v_speed1 to Pitch_Data["V_Speed"].
+	local t_1 to Pitch_Data["Time"].
+	local v_speed2 to verticalspeed.
+	local t_2 to time:seconds.
+	local dt to max(0.0001,t_2 - t_1).
+	local v_accel to max(0.001,(v_speed2 - v_speed2)/dt).
+	local alt_final is Pitch_Data["Alt_Final"].
+	local alt_diff is alt_final - altitude.
+	
+	local a to .5*v_accel.
+	local b to verticalspeed.
+	local c to -alt_diff.
+	
+	local time_to_alt to ((-b) + sqrt(max(0,b^2 - 4*a*c)))/(2*a).
+	local pitch_des to Pitch_Data["Pitch"].
+	local pitch_final to Pitch_Data["Pitch_Final"].
+	local pitch_rate to max(0,(pitch_final - pitch_des)/time_to_alt).
+	
+	local pitch_des to min(pitch_final,max(0,pitch_des + dt*pitch_rate)).
+	
+	set Pitch_Data["Pitch"] to pitch_des.
+	set Pitch_Data["Time"] to t_2.
+	set Pitch_Data["V_Speed"] to v_speed2.
+	
+	return Pitch_Data.
+}
+
+function Calculate_DeltaV {
+	parameter DeltaV_Data.
+	
+	local thrust_accel_1 to DeltaV_Data["Thrust_Accel"].
+	local thrust_accel_2 to throttle*availablethrust/mass.
+	local a_vec1 to DeltaV_Data["Accel_Vec"].
+	local a_vec2 to throttle*ship:sensors:acc.
+	local time1 to DeltaV_Data["Time"].
+	local time2 to time:seconds.
+	local dt to max(0.0001,time2 - time1).
+	local thrust_accel to (thrust_accel_1 + thrust_accel_2)/2.
+	local a_vec to (a_vec1 + a_vec2)/2.
+	local thrust_vec to thrust_accel*ship:facing:vector.
+	set DeltaV_Data["Total"] to DeltaV_Data["Total"] + thrust_accel*dt.
+	local obt_vel_norm to ship:velocity:orbit:normalized.
+	set DeltaV_Data["Gain"] to DeltaV_Data["Gain"] + dt*(VDOT(obt_vel_norm,a_vec)).
+	
+	set DeltaV_Data["Time"] to time2.
+	set DeltaV_Data["Accel_Vec"] to a_vec2.
+	set DeltaV_Data["Thrust_Accel"] to thrust_accel_2.
+	
+	return DeltaV_Data.
 }
 
 declare function circ_speed {
@@ -54,11 +107,12 @@ declare function Circularize_DV_Calc{
 }
 
 // Ignition
-local pitch_ang to 90.
+local pitch_ang to 0.
+local compass to 90.
 lock throttle to 1.
-lock steering to heading(90,pitch_ang).
+lock steering to lookdirup(heading(compass,90-pitch_ang):vector,ship:facing:upvector).
 stage.
-AG1 on.
+AG3 on.
 
 // Basic Staging:
 local current_max to maxthrust.
@@ -70,9 +124,15 @@ when maxthrust < current_max OR availablethrust = 0 then {
 	preserve.
 }
 
-// Gravity Turn Parameters
-local min_VS is 30.
-local pitch_over_ang is 2.
+// Pitch Program Parameters
+local min_VS is 10.
+set Pitch_Data to lexicon().
+Pitch_Data:ADD("Time",time:seconds).
+Pitch_Data:ADD("Pitch",0).
+Pitch_Data:ADD("Pitch_Final",85).
+Pitch_Data:ADD("V_Speed",verticalspeed).
+Pitch_Data:ADD("Alt_Final",0.7*ship:body:atm:height).
+
 local switch_alt is 0.
 
 // Run Mode Variables
@@ -80,32 +140,26 @@ local AscentStage is 1.
 local ThrottleStage is 1.
 
 // Delta V Variables
-local DeltaV_total is 0.
-local DeltaV_gain is 0.
-local time1 is time:seconds.
-local time2 is time:seconds.
-local dt is 0.00001.
-local thrust_accel_1 is throttle*availablethrust/mass.
-local thrust_accel_2 is throttle*availablethrust/mass.
-local a_vec1 is throttle*ship:sensors:acc.
-local a_vec2 is throttle*ship:sensors:acc.
+set DeltaV_Data to lexicon().
+DeltaV_Data:ADD("Total",0).
+DeltaV_Data:ADD("Gain",0).
+DeltaV_Data:ADD("Time",time:seconds).
+DeltaV_Data:ADD("Thrust_Accel",throttle*availablethrust/mass).
+DeltaV_Data:ADD("Accel_Vec",throttle*ship:sensors:acc).
+
 local line is 1.
 
-until AscentStage = 3 AND altitude > ship:body:ATM:height {
+until AscentStage = 2 AND altitude > ship:body:ATM:height {
 	// Run Mode Logic
-	if verticalspeed > min_VS AND AscentStage = 1 {
-		set AscentStage to 2.
-		set switch_alt to altitude.
-	}
 	
 	if apoapsis > TargetOrbit AND ThrottleStage = 1 {
 		lock throttle to 0.
 		set ThrottleStage to 2.
-		set AscentStage to 3.
+		set AscentStage to 2.
 	}
 	
-	// Pitch Program 
-	set pitch_ang to PitchProgram(AscentStage,switch_alt).
+	set Pitch_Data to PitchProgram_Rate(Pitch_Data).
+	set pitch_ang to Pitch_Data["Pitch"].
 	
 	
 	// Variable Printout
@@ -114,7 +168,7 @@ until AscentStage = 3 AND altitude > ship:body:ATM:height {
 	set line to line + 1.
 	print "AscentStage   = " + AscentStage + "   " at(0,line).
 	set line to line + 1.
-	print "pitch_ang     = " + round(pitch_ang) + "   " at(0,line).
+	print "pitch_ang     = " + round(pitch_ang,2) + "   " at(0,line).
 	set line to line + 1.
 	print "altitude      = " + round(altitude) + "   " at(0,line).
 	set line to line + 1.
@@ -126,36 +180,21 @@ until AscentStage = 3 AND altitude > ship:body:ATM:height {
 	
 	
 	// Delta V Calculations
-	set thrust_accel_2 to throttle*availablethrust/mass.
-	set a_vec2 to throttle*ship:sensors:acc.
-	set time2 to time:seconds.
-	set dt to time2 - time1.
-	local thrust_accel to (thrust_accel_1 + thrust_accel_2)/2.
-	local a_vec to (a_vec1 + a_vec2)/2.
-	set thrust_vec to thrust_accel*ship:facing:vector.
-	set DeltaV_total to DeltaV_total + thrust_accel*dt.
-	local obt_vel_norm to ship:velocity:orbit:normalized.
-	set DeltaV_Gain to DeltaV_gain + dt*(VDOT(obt_vel_norm,a_vec)).
-	local DeltaV_Losses to DeltaV_gain - DeltaV_total.
-	local DeltaV_Eff to 100*DeltaV_Gain/DeltaV_total.
-	
-	set thrust_accel_1 to thrust_accel_2.
-	set a_vec1 to a_vec2.
-	set time1 to time2.
+	set DeltaV_Data to Calculate_DeltaV(DeltaV_Data).
 	
 	// Delta V Printout
 	set line to line + 3.
-	print "DeltaV_total  = " + round(DeltaV_total) + "   " at(0,line).
+	print "DeltaV_total  = " + round(DeltaV_Data["Total"]) + "   " at(0,line).
 	set line to line + 1.
-	print "DeltaV_gain   = " + round(DeltaV_gain) + "   " at(0,line).
+	print "DeltaV_gain   = " + round(DeltaV_Data["Gain"]) + "   " at(0,line).
 	set line to line + 1.
-	print "DeltaV_Losses = " + round(DeltaV_Losses) + "   " at(0,line).
+	print "DeltaV_Losses = " + round(DeltaV_Data["Total"] - DeltaV_Data["Gain"]) + "   " at(0,line).
 	set line to line + 1.
-	print "DeltaV_Eff    = " + round(DeltaV_Eff) + "%   " at(0,line).
+	print "DeltaV_Eff    = " + round(100*DeltaV_Data["Gain"]/DeltaV_Data["Total"]) + "%   " at(0,line).
 	
 	wait 0.
 }
 
 local DV_Circ to Circularize_DV_Calc().
 set line to line + 3.
-print "Total Delta V for Circularization " + round(DeltaV_total + DV_Circ) + "    " at(0,line).
+print "Total Delta V for Circularization " + round(DeltaV_Data["Total"] + DV_Circ) + "    " at(0,line).
