@@ -14,7 +14,7 @@ function ExecuteNode {
 	print "Alignment Complete".
 	print "Warping to Burn Point".
 	print "Burn Starts at T-minus " + round(BurnTime,2) + "secs   ".
-	warpto(time:seconds + nextnode:eta - BurnTime - 10).
+	warpto(time:seconds + nextnode:eta - BurnTime/2 - 10).
 	wait until warp <= 0.
 
 	clearscreen.
