@@ -9,7 +9,6 @@ function ExecuteNode {
 	until VANG(ship:facing:vector,nextnode:burnvector) < 1 {
 		print "Direction Angle Error = " + round(VANG(ship:facing:vector,nextnode:burnvector),1) + "   "at(0,1).
 	}
-  wait 1.
 	clearscreen.
 	print "Alignment Complete".
 	print "Warping to Burn Point".
@@ -30,7 +29,7 @@ function ExecuteNode {
       print "diff_dv  = " + round(diff_dv,2) + "   " at(0,4).
 	  } else {
       set Delta_V to nextnode:deltav:mag.
-		  lock throttle to .5*Delta_V*mass/availablethrust.
+		  lock throttle to 1*Delta_V*mass/availablethrust.
 		  print "Initiate Burn                            " at(0,1).
 		  print "Delta V = " + round(Delta_V,2) + "   " at(0,2).
 		  print "Throttle = " + MIN(100,round(throttle*100)) + "%   " at(0,3).

@@ -47,13 +47,13 @@ function stage1_vec {
 }
 
 function position_correction {
-    parameter target_position,checker.
+    parameter target_position,checker,max_rcs_speed.
 
     // Translation V(STAR,TOP,FORE)
     local max_acc to 1/mass.
     local dist to target_position:mag.
     //print dist at(0,10).
-    local desired_speed to sqrt(max(0,2*dist*max_acc)).
+    local desired_speed to min(max_rcs_speed,sqrt(max(0,2*dist*max_acc))).
     //print "desired_speed = " + round(desired_speed,2) at(0,11).
     local desired_velocity to desired_speed*target_position:normalized.
     set vec4:vecupdater to {return 5*desired_velocity.}.
@@ -65,9 +65,17 @@ function position_correction {
     return output.
 }
 
-local DockingPort to ship:partstagged("MainDockingPort")[0].
+list DockingPorts in DP_list.
+local DockingPort to DP_list[0].
+
+if target:istype("VESSEL") {
+  // set new target to the ship's first docking port
+  local target_dockingport to target:dockingports[0].
+  set target to target_dockingport.
+}
 
 local maxacc_RCS to 2/mass.
+local max_rcs_speed to 10.
 
 // Vector from Docking Port to Docking Port
 set vec1 to vecdraw().
@@ -129,7 +137,7 @@ until DockingPort:state:split(" ")[0] = "Docked" {
   }
 
   if not(capture) AND docking_stage = 1 {
-    local output to position_correction(stage1_vec,DockingPort).
+    local output to position_correction(stage1_vec,DockingPort,max_rcs_speed).
     vector_to_translation(output).
     if stage1_vec:mag < 0.1 AND target_relative_velocity:mag < 0.1{
       set docking_stage to 2.
@@ -138,7 +146,7 @@ until DockingPort:state:split(" ")[0] = "Docked" {
   }
 
   if not(capture) AND docking_stage =  2 {
-    local output to position_correction(target_relative_position,DockingPort).
+    local output to position_correction(target_relative_position,DockingPort,max_rcs_speed).
     vector_to_translation(output).
   }
 

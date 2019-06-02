@@ -146,7 +146,6 @@ local compass to inst_az(inc_des).
 lock throttle to 1.
 lock steering to lookdirup(heading(compass,90-pitch_ang):vector,ship:facing:upvector).
 stage.
-AG3 on. // Open the Terminal
 
 // Basic Staging:
 local current_max to maxthrust.

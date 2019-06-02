@@ -19,8 +19,6 @@ function Change_LAN_Inc {
 
 	local LAN_relative_theta to FindTheta_Vec(LAN_relative_vec).
 	local LAN_eta to ETA_to_theta(LAN_relative_theta).
-	//local LAN_node to NODE( time:seconds + LAN_eta,0,0,0).
-	//add LAN_node.
 
 	local delta_inc to VANG(AngVel_ship,Inc_Normal).
 	local Vel_at_LAN to velocityat(ship,time:seconds + LAN_eta):orbit.
@@ -32,53 +30,51 @@ function Change_LAN_Inc {
 	local LAN_node to SetNode_BurnVector(time:seconds + LAN_eta,New_Vel_at_LAN).
 	add LAN_node.
 
-
-
 	// Debugging Vecdraws
-	set LAN_VEC_Draw to vecdraw().
-	set LAN_VEC_Draw:startupdater to { return ship:body:position. }.
-	set LAN_VEC_Draw:vecupdater to { return LAN_VEC. }.
-	set LAN_VEC_Draw:show to true.
-	set LAN_VEC_Draw:color to RGB(255,0,0).
+	//set LAN_VEC_Draw to vecdraw().
+	//set LAN_VEC_Draw:startupdater to { return ship:body:position. }.
+	//set LAN_VEC_Draw:vecupdater to { return LAN_VEC. }.
+	//set LAN_VEC_Draw:show to true.
+	//set LAN_VEC_Draw:color to RGB(255,0,0).
 
-	set INC_VEC_Draw to vecdraw().
-	set INC_VEC_Draw:startupdater to { return ship:body:position. }.
-	set INC_VEC_Draw:vecupdater to { return Inc_Normal. }.
-	set INC_VEC_Draw:show to true.
-	set INC_VEC_Draw:color to RGB(0,255,0).
+	//set INC_VEC_Draw to vecdraw().
+	//set INC_VEC_Draw:startupdater to { return ship:body:position. }.
+	//set INC_VEC_Draw:vecupdater to { return Inc_Normal. }.
+	//set INC_VEC_Draw:show to true.
+	//set INC_VEC_Draw:color to RGB(0,255,0).
 
-	set ANG_VEC_Draw to vecdraw().
-	set ANG_VEC_Draw:startupdater to { return ship:body:position. }.
-	set ANG_VEC_Draw:vecupdater to { return AngVel_ship. }.
-	set ANG_VEC_Draw:show to true.
-	set ANG_VEC_Draw:color to RGB(0,0,255).
+	//set ANG_VEC_Draw to vecdraw().
+	//set ANG_VEC_Draw:startupdater to { return ship:body:position. }.
+	//set ANG_VEC_Draw:vecupdater to { return AngVel_ship. }.
+	//set ANG_VEC_Draw:show to true.
+	//set ANG_VEC_Draw:color to RGB(0,0,255).
 
-	set Rel_LAN_VEC_Draw to vecdraw().
-	set Rel_LAN_VEC_Draw:startupdater to { return ship:body:position. }.
-	set Rel_LAN_VEC_Draw:vecupdater to { return LAN_relative_vec. }.
-	set Rel_LAN_VEC_Draw:show to true.
-	set Rel_LAN_VEC_Draw:color to RGB(255,255,0).
+	//set Rel_LAN_VEC_Draw to vecdraw().
+	//set Rel_LAN_VEC_Draw:startupdater to { return ship:body:position. }.
+	//set Rel_LAN_VEC_Draw:vecupdater to { return LAN_relative_vec. }.
+	//set Rel_LAN_VEC_Draw:show to true.
+	//set Rel_LAN_VEC_Draw:color to RGB(255,255,0).
 
-	set LAN_VEL_VEC_Draw to vecdraw().
-	set LAN_VEL_VEC_Draw:startupdater to { return V(0,0,0). }.
-	set LAN_VEL_VEC_Draw:vecupdater to { return Vel_at_LAN/50. }.
-	set LAN_VEL_VEC_Draw:show to true.
-	set LAN_VEL_VEC_Draw:color to RGB(255,0,0).
+	//set LAN_VEL_VEC_Draw to vecdraw().
+	//set LAN_VEL_VEC_Draw:startupdater to { return V(0,0,0). }.
+	//set LAN_VEL_VEC_Draw:vecupdater to { return Vel_at_LAN/50. }.
+	//set LAN_VEL_VEC_Draw:show to true.
+	//set LAN_VEL_VEC_Draw:color to RGB(255,0,0).
 
-	set LAN_VEL_VEC_Draw2 to vecdraw().
-	set LAN_VEL_VEC_Draw2:startupdater to { return V(0,0,0). }.
-	set LAN_VEL_VEC_Draw2:vecupdater to { return New_Vel_at_LAN/50. }.
-	set LAN_VEL_VEC_Draw2:show to true.
-	set LAN_VEL_VEC_Draw2:color to RGB(0,255,0).
+	//set LAN_VEL_VEC_Draw2 to vecdraw().
+	//set LAN_VEL_VEC_Draw2:startupdater to { return V(0,0,0). }.
+	//set LAN_VEL_VEC_Draw2:vecupdater to { return New_Vel_at_LAN/50. }.
+	//set LAN_VEL_VEC_Draw2:show to true.
+	//set LAN_VEL_VEC_Draw2:color to RGB(0,255,0).
 
-	wait 1.
+	//wait 1.
 
 	if nextnode:burnvector:mag > 0.05 {
-		//exenode_peg().
     ExecuteNode().
-	}
-
-	return true.
+	} else {
+    remove nextnode.
+    wait 0.
+  }
 }
 
 function Change_AoP_PerApo {
@@ -93,7 +89,6 @@ function Change_AoP_PerApo {
 	local AngVel_ship to SMA_ship*VCRS(R,ship:velocity:orbit):normalized.
 	local AOP_ship to ship:orbit:argumentofperiapsis.
 	local AoP_Rotate to ANGLEAXIS(DesiredOrbit["AOP"],AngVel_ship).
-	//local AoP_Rotate to ANGLEAXIS(AOP_ship,AngVel_ship).  // Used for debugging
 	local AoP_VEC to AoP_Rotate*(LAN_VEC:direction).
 	local AoP_VEC to SMA_ship*AoP_VEC:vector.
 
@@ -148,10 +143,6 @@ function FindTheta_Vec {
 		set theta to theta - 360.
 	}
 
-	clearscreen.
-  //	print "Ship Theta is " + round(theta_ship,2).
-  //	print "Theta is      " + round(theta,2).
-  //	wait 3.
 	return theta.
 }
 
@@ -164,7 +155,6 @@ function ETA_to_theta {
 	local e to ship:orbit:eccentricity.
 	local GM to ship:body:mu.
 	local a to ship:orbit:semimajoraxis.
-	clearscreen.
 
 	local EA_ship to 2*ARCTAN((TAN(theta_ship/2))/sqrt((1+e)/(1-e))).
 	local MA_ship to EA_ship*constant:pi/180 - e*SIN(EA_ship).
@@ -176,8 +166,6 @@ function ETA_to_theta {
 		set eta_to_testpoint to T_orbit + eta_to_testpoint.
 	}
 
-  //	print "ETA to " + round(theta_test,2) + " degrees True Anomaly is " + round(eta_to_testpoint,2) + " seconds".
-  //	wait 2.
 	return eta_to_testpoint.
 }
 
@@ -207,9 +195,11 @@ function Apoapsis_Set_TimeAt {
 	local burn_time to delta_v_current/max_acc.
 
 	if nextnode:burnvector:mag > 0.05 {
-  	//exenode_peg().
     ExecuteNode().
-	}
+	} else {
+    remove nextnode.
+    wait 0.
+  }
 	// Debugging Vecdraws
 	//set R_VEC_Draw to vecdraw().
 	//set R_VEC_Draw:startupdater to { return ship:body:position. }.
@@ -217,7 +207,7 @@ function Apoapsis_Set_TimeAt {
 	//set R_VEC_Draw:show to true.
 	//set R_VEC_Draw:color to RGB(0,0,255).
 
-	wait 1.
+	//wait 1.
 }
 
 function Periapsis_Set_TimeAt {
@@ -237,11 +227,11 @@ function Periapsis_Set_TimeAt {
 	add PER_node.
 
 	if nextnode:burnvector:mag > 0.05 {
-		//exenode_peg().
     ExecuteNode().
-	}
-
-
+	} else {
+    remove nextnode.
+    wait 0.
+  }
 }
 
 function vis_via_speed {
@@ -280,6 +270,7 @@ for key in default_DesiredOrbit:keys {
     if not DesiredOrbit:haskey(key) { set DesiredOrbit[key] to default_DesiredOrbit[key]. }
 }
 clearscreen.
+print "Changing Orbit to:".
 print DesiredOrbit.
 wait 2.
 
@@ -290,25 +281,8 @@ local tolerance_angle to 0.01.
 local LAN_diff to abs(DesiredOrbit["LAN"] - LAN_ship).
 local INC_diff to abs(DesiredOrbit["INC"] - INC_ship).
 
-if  LAN_diff < tolerance_angle AND INC_diff < tolerance_angle {
-
-	print "No Change to Inclination or LAN".
-	wait 2.
-
-} else {
-
-	if LAN_diff > tolerance_angle {
-		print "LAN is above tolerance with a difference of " + round(LAN_diff,3) + " degrees".
-	}
-	if INC_diff > tolerance_angle {
-		print "INC is above tolerance with a difference of " + round(INC_diff,3) + " degrees".
-	}
-	print "Running Change_LAN_Inc".
-	for n in allnodes { remove n.}
-	wait 5.
-	Change_LAN_Inc(DesiredOrbit).
-	wait 1.
-	for n in allnodes { remove n.}
+if  not(LAN_diff < tolerance_angle AND INC_diff < tolerance_angle) {
+  Change_LAN_Inc(DesiredOrbit).
 }
 local AOP_ship to ship:orbit:argumentofperiapsis.
 local PER_ship to ship:orbit:periapsis.
@@ -324,29 +298,7 @@ local PER_diff_percent to 100*(PER_diff/DesiredOrbit["PER"]).
 
 local tolerance_percent to 0.05.
 
-if AOP_diff_percent < tolerance_percent AND APO_diff_percent < tolerance_percent AND PER_diff_percent < tolerance_percent {
-
-	print "No Change to Argument of Periapsis, Apoapsis, or Periapsis".
-	wait 2.
-
-} else {
-
-	if AOP_diff_percent > tolerance_percent {
-		print "AoP is above tolerance with a difference of " + round(AOP_diff,3) + "%".
-	}
-	if APO_diff_percent > tolerance_percent {
-		print "Apoapsis is above tolerance with a difference of " + round(APO_diff_percent,3) + "%".
-	}
-	if PER_diff_percent > tolerance_percent {
-		print "Periapsis is above tolerance with a difference of " + round(PER_diff_percent,3) + "%".
-	}
-
-	print "Running Change_AoP_PerApo".
-	wait 5.
-	for n in allnodes { remove n.}
+if not(AOP_diff_percent < tolerance_percent AND APO_diff_percent < tolerance_percent AND PER_diff_percent < tolerance_percent) {
 	Change_AoP_PerApo(DesiredOrbit).
-	wait 1.
-	for n in allnodes { remove n.}
-
 }
 clearvecdraws().

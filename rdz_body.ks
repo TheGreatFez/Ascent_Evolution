@@ -4,7 +4,7 @@ parameter target_periapsis is target:radius/2.
 
 clearscreen.
 for node in allnodes {remove node.}
-run lib_drawvec.
+run lib_execnode.
 
 function ETA_to_theta {
 
@@ -210,8 +210,8 @@ until i >= 100 OR dont_start {
 	print "delta_dir = " + delta_dir at (0,5).
 	print "test_periapsis = " + round(test_periapsis,2) at (0,6).
 	print "target_periapsis = " + target_periapsis at (0,7).
-
-  wait 1.
+  // Uncomment to slow down iteration process for visualization
+  //wait 1.
 
 }
 clearscreen.
@@ -222,4 +222,7 @@ if bad_intercept {
 	print "Successful Intercept".
 	print "Iterations " + i.
 	print "Periapsis within " + round(abs(test_periapsis - target_periapsis),2) + " meters".
+  wait 2.
+  clearvecdraws().
+  ExecuteNode().
 	}
