@@ -8,7 +8,7 @@ clearvecdraws().
 
 SAS OFF.
 if HASNODE {
-  run lib_execnode.
+  RUNONCEPATH("Library/lib_execnode.ks").
 	for node in ALLNODES { ExecuteNode(). }
   local max_acc to maxthrust/mass.
   local peri_v to velocityat(ship,time:seconds + eta:periapsis):orbit:mag.

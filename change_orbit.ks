@@ -1,4 +1,4 @@
-run lib_execnode.
+RUNONCEPATH("Library/lib_execnode.ks").
 
 function Change_LAN_Inc {
 

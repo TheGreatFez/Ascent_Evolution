@@ -1,6 +1,6 @@
 clearscreen.
 
-run lib_execnode.
+RUNONCEPATH("Library/lib_execnode.ks").
 
 for node in allnodes {remove node.}
 lock Vper to VCRS(UP:vector,velocity:orbit/velocity:orbit:mag).

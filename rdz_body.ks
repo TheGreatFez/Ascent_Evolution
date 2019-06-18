@@ -4,7 +4,7 @@ parameter target_periapsis is target:radius/2.
 
 clearscreen.
 for node in allnodes {remove node.}
-run lib_execnode.
+RUNONCEPATH("Library/lib_execnode.ks").
 
 function ETA_to_theta {
 
