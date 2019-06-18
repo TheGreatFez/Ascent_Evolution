@@ -1,5 +1,6 @@
 @LAZYGLOBAL OFF.
 set config:ipu to 2000.
+AG1 ON.
 KUniverse:quicksaveto("Kerpollo 2 Phase 1 - Launch").
 run launch.
 

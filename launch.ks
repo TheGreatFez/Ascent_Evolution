@@ -7,27 +7,100 @@ clearscreen.
 set ship:control:pilotmainthrottle to 0.
 
 // Main Inputs
-local TargetOrbit is 250000. // The target altitude of our parking orbit.
-run lib_execnode.
+local TargetOrbit is 400000. // The target altitude of our parking orbit.
+
+local PitchProgram_Select to 3.
+local log_data to true.
+local log_data_dt to 0.5.
+local log_file_name to "".
+local log_var_names to "Time,Altitude,Vertical_Speed,Horizontal_Speed,Pitch,Gamma,Apoapsis,Periapsis,TWR,DeltaV_Gain,DeltaV_Loss,DeltaV_Total".
+local ship_name to "TestCraft".
+// 1 = Square Root Curve
+// 2 = Pitch Rate with Acceleration Integration
+// 3 = Pitch Rate with Jerk Integration
+
+// Initialize Log File
+function list_to_string {
+  parameter inputList.
+
+  local outputString to "".
+  local first to true.
+  for item in inputList {
+    if first {
+      set outputString to outputString  + item .
+      set first to false.
+    } else {
+      set outputString to outputString + "," + item.
+    }
+  }
+  return outputString.
+}
+
+if log_data{
+  if PitchProgram_Select = 1 {
+    set log_file_name to ship_name + "_" + "Sqrt.csv".
+    deletepath(log_file_name).
+  }
+  if PitchProgram_Select = 2 {
+    set log_file_name to ship_name + "_" + "Accel.csv".
+    deletepath(log_file_name).
+  }
+  if PitchProgram_Select = 3 {
+    set log_file_name to ship_name + "_" + "Jerk.csv".
+    deletepath(log_file_name).
+  }
+  log log_var_names to log_file_name.
+}
+
+function log_data_func {
+  parameter log_file_name, log_data_start, DeltaV_Data.
+
+  local log_var_list is LIST().
+  log_var_list:ADD(time:seconds - log_data_start).
+  log_var_list:ADD(altitude).
+  log_var_list:ADD(verticalspeed).
+  log_var_list:ADD(groundspeed).
+  log_var_list:ADD(VANG(UP:vector,ship:facing:vector)).
+  log_var_list:ADD(VANG(UP:vector,ship:velocity:surface)).
+  log_var_list:ADD(apoapsis).
+  log_var_list:ADD(periapsis).
+  local TWR to (availablethrust/mass)/g().
+  log_var_list:ADD(TWR).
+  log_var_list:ADD(DeltaV_Data["Gain"]).
+  log_var_list:ADD(DeltaV_Data["Total"] - DeltaV_Data["Gain"]).
+  log_var_list:ADD(DeltaV_Data["Total"]).
+
+  local log_var_data to list_to_string(log_var_list).
+
+  log log_var_data to log_file_name.
+}
+
+RUNONCEPATH("Library/lib_derivator.ks").
+RUNONCEPATH("Library/lib_integrator.ks").
+RUNONCEPATH("Library/lib_VerticalAccelCalcs.ks").
+RUNONCEPATH("Library/lib_MachNumber.ks").
+RUNONCEPATH("Library/lib_BisectionSolver.ks").
+RUNONCEPATH("Library/lib_execnode.ks").
+
+local v_accel_func to makeDerivator_N(0,10).
+local v_jerk_func to makeDerivator_N(0,20).
 // Functions
 
 function PitchProgram_Sqrt {
-	parameter InputData, switch_alt is 250.
-	local pitch_ang to 90.
-	local FollowPitch to true.
+	parameter switch_alt is 250.
+	local pitch_ang to 0.
+	local FollowPitch to false.
 	local scale_factor to 1.0.
 	local alt_diff is scale_factor*ship:body:atm:height - switch_alt.
 
 	local SrfProg_pitch to 90 - VANG(UP:vector,srfprograde:vector).
 	local ObtProg_pitch to 90 - VANG(UP:vector,prograde:vector).
 
-	if AscentStage = 2 {
-		set pitch_ang to 90 - max(0,min(90,90*sqrt((altitude - switch_alt)/alt_diff))).
-		if ObtProg_pitch > pitch_ang AND FollowPitch{
+	if altitude >= switch_alt {
+		set pitch_ang to max(0,min(90,90*sqrt((altitude - switch_alt)/alt_diff))).
+		if ObtProg_pitch > pitch_ang AND FollowPitch {
 			set pitch_ang to ObtProg_pitch.
 		}
-	} else if AscentStage = 3 {
-		set pitch_ang to SrfProg_pitch.
 	}
 
 	return pitch_ang.
@@ -35,16 +108,13 @@ function PitchProgram_Sqrt {
 
 function PitchProgram_Rate {
 	parameter Pitch_Data.
-	local v_speed1 to Pitch_Data["V_Speed"].
 	local t_1 to Pitch_Data["Time"].
-	local v_speed2 to verticalspeed.
 	local t_2 to time:seconds.
 	local dt to max(0.0001,t_2 - t_1).
-	local v_accel to max(0.001,(v_speed2 - v_speed2)/dt).
 	local alt_final is Pitch_Data["Alt_Final"].
 	local alt_diff is alt_final - altitude.
 
-	local a to .5*v_accel.
+	local a to .5*getVertAccel().
 	local b to verticalspeed.
 	local c to -alt_diff.
 
@@ -57,9 +127,62 @@ function PitchProgram_Rate {
 
 	set Pitch_Data["Pitch"] to pitch_des.
 	set Pitch_Data["Time"] to t_2.
-	set Pitch_Data["V_Speed"] to v_speed2.
+  set Pitch_Data["Time_to_Alt"] to time_to_alt.
 
 	return Pitch_Data.
+}
+
+function makePitch_rate_function {
+  parameter vertspeed_min.
+
+  local pitch_des to 0.
+  local pitch_final to 90.
+  local begin_pitch to false.
+  local timeLast to time:seconds.
+
+  return {
+    parameter time_to_alt.
+
+    if not(begin_pitch) AND verticalspeed > vertspeed_min {
+      set begin_pitch to true.
+    }
+
+    local timeNow to time:seconds.
+    local dt to timeNow - timeLast.
+    set timeLast to timeNow.
+
+    if begin_pitch AND (machNumber() < 0.85 OR machNumber() > 1.1) {
+      local pitch_rate to max(0,(pitch_final - pitch_des)/time_to_alt).
+      set pitch_des to min(pitch_final,max(0,pitch_des + dt*pitch_rate)).
+    }
+    return pitch_des.
+  }.
+}
+
+function getVertAccel {
+  return v_accel_func:call(verticalspeed).
+}
+
+function getVertJerk {
+  return v_jerk_func:call(getVertAccel).
+}
+
+function AltIntegration_Jerk {
+  parameter time_input.
+
+  local x is time_input.
+  local d is altitude.
+  local c is verticalspeed.
+  local b is getVertAccel()/2.
+  local a is getVertJerk()/6.
+
+  return d + c*x + b*x^2 + a*x^3.
+}
+
+function T2Alt_Score {
+  parameter time_input.
+
+  return ship:body:atm:height - AltIntegration_Jerk(time_input).
 }
 
 function Calculate_DeltaV {
@@ -86,7 +209,7 @@ function Calculate_DeltaV {
 	return DeltaV_Data.
 }
 
-function circ_speed {
+function circular_speed {
 	parameter R.
 	local R_val to ship:body:radius + R.
 	return sqrt(ship:body:mu/R_val).
@@ -99,7 +222,7 @@ function vis_via_speed {
 }
 
 function Circularize_DV_Calc{
-	local Vapo_cir to circ_speed(apoapsis).
+	local Vapo_cir to circular_speed(apoapsis).
 	local Delta_V to  Vapo_cir - vis_via_speed(apoapsis).
 	local CirPer to NODE(TIME:seconds + eta:apoapsis, 0, 0, Delta_V).
 	ADD CirPer.
@@ -157,16 +280,23 @@ when maxthrust < current_max OR availablethrust = 0 then {
 	preserve.
 }
 
-// Pitch Program Parameters
+// Pitch Program Parameters: Sqrt
+local switch_alt is altitude.
+
+// Pitch Program Parameters: Rate
 local min_VS is 10.
 set Pitch_Data to lexicon().
 Pitch_Data:ADD("Time",time:seconds).
+Pitch_Data:ADD("Time_to_Alt",0).
 Pitch_Data:ADD("Pitch",0).
-Pitch_Data:ADD("Pitch_Final",85).
-Pitch_Data:ADD("V_Speed",verticalspeed).
-Pitch_Data:ADD("Alt_Final",0.7*ship:body:atm:height).
+Pitch_Data:ADD("Pitch_Final",90).
+Pitch_Data:ADD("Alt_Final",ship:body:atm:height).
 
-local switch_alt is 0.
+// Pitch Program Parameters: Jerk Integration
+
+local T2Alt_Solver to makeBiSectSolver(T2Alt_Score@,100,101).
+local T2Alt_TestPoints to T2Alt_Solver:call().
+local pitch_controller to makePitch_rate_function(10).
 
 // Run Mode Variables
 local AscentStage is 1.
@@ -180,10 +310,15 @@ DeltaV_Data:ADD("Time",time:seconds).
 DeltaV_Data:ADD("Thrust_Accel",throttle*availablethrust/mass).
 DeltaV_Data:ADD("Accel_Vec",throttle*ship:sensors:acc).
 
+// Log Data Time Management
+local log_data_start to time:seconds.
+local log_data_count to 0.
+
 local line is 1.
+local FPA is VANG(UP:vector,ship:velocity:surface).
+clearscreen.
 
 until AscentStage = 2 AND altitude > ship:body:ATM:height {
-	// Run Mode Logic
 
 	if apoapsis > TargetOrbit AND ThrottleStage = 1 {
 		lock throttle to 0.
@@ -191,8 +326,25 @@ until AscentStage = 2 AND altitude > ship:body:ATM:height {
 		set AscentStage to 2.
 	}
 
-	set Pitch_Data to PitchProgram_Rate(Pitch_Data).
-	set pitch_ang to Pitch_Data["Pitch"].
+  if AscentStage = 1 {
+    if PitchProgram_Select = 1 {
+      set pitch_ang to PitchProgram_Sqrt(switch_alt).
+    }
+    if PitchProgram_Select = 2 {
+      set Pitch_Data to PitchProgram_Rate(Pitch_Data).
+      set pitch_ang to Pitch_Data["Pitch"].
+    }
+    if PitchProgram_Select = 3 {
+      set T2Alt_TestPoints to T2Alt_Solver:call().
+      set pitch_ang to pitch_controller:call(T2Alt_TestPoints[2][0]).
+    }
+  }
+
+  if AscentStage = 2 {
+    set pitch_ang to FPA.
+  }
+
+  set FPA to VANG(UP:vector,ship:velocity:surface).
 	set compass to inst_az(inc_des).
 
 	// Variable Printout
@@ -201,17 +353,42 @@ until AscentStage = 2 AND altitude > ship:body:ATM:height {
 	set line to line + 1.
 	print "AscentStage   = " + AscentStage + "   " at(0,line).
 	set line to line + 1.
-	print "pitch_ang     = " + round(pitch_ang,2) + "   " at(0,line).
+  print "pitch_ang     = " + round(pitch_ang,2) + "   " at(0,line).
 	set line to line + 1.
-	print "compass      = " + round(compass,2) + "   " at(0,line).
+  if PitchProgram_Select = 1 {
+    print "Pitch Program: Square Root Curve       " at(0,line).
+    set line to line + 1.
+  	print "switch_alt    = " + round(switch_alt) + "   " at(0,line).
+  }
+  if PitchProgram_Select = 2 {
+    print "Pitch Program: Pitch Rate with Acceleration               " at(0,line).
+  	set line to line + 1.
+    print "Vert Accel  = " + round(getVertAccel(),3) + "     " at(0,line).
+    set line to line + 1.
+    print "Time to Alt = " + round(Pitch_Data["Time_to_Alt"],2) + "     " at(0,line).
+  	set line to line + 1.
+  }
+  if PitchProgram_Select = 3 {
+    print "Pitch Program: Pitch Rate with Jerk                     " at(0,line).
+    set line to line + 1.
+    print "Vert Accel  = " + round(getVertAccel(),3) + "     " at(0,line).
+    set line to line + 1.
+    print "Vert Jerk   = " + round(getVertJerk(),3) + "     " at(0,line).
+  	set line to line + 1.
+    print "Time to Alt = " + round(T2Alt_TestPoints[2][0],2) + "     " at(0,line).
+  	set line to line + 1.
+  }
+  print "Gamma         = " + round(FPA,2) + "   " at(0,line).
 	set line to line + 1.
-	print "altitude      = " + round(altitude) + "   " at(0,line).
+	print "Compass       = " + round(compass,2) + "   " at(0,line).
 	set line to line + 1.
-	print "switch_alt    = " + round(switch_alt) + "   " at(0,line).
+	print "Altitude      = " + round(altitude) + "   " at(0,line).
 	set line to line + 1.
-	print "apoapsis      = " + round(apoapsis) + "   " at(0,line).
+	print "Apoapsis      = " + round(apoapsis) + "   " at(0,line).
 	set line to line + 1.
-	print "TargetOrbit   = " + TargetOrbit + "   " at(0,line).
+	print "Target Ap o   = " + TargetOrbit + "   " at(0,line).
+  set line to line + 1.
+	print "Periapsis     = " + round(periapsis) + "   " at(0,line).
 
 
 	// Delta V Calculations
@@ -226,6 +403,10 @@ until AscentStage = 2 AND altitude > ship:body:ATM:height {
 	print "DeltaV_Losses = " + round(DeltaV_Data["Total"] - DeltaV_Data["Gain"]) + "   " at(0,line).
 	set line to line + 1.
 	print "DeltaV_Eff    = " + round(100*DeltaV_Data["Gain"]/DeltaV_Data["Total"]) + "%   " at(0,line).
+  if time:seconds - log_data_start >= log_data_count*log_data_dt {
+    log_data_func(log_file_name,log_data_start,DeltaV_Data).
+    set log_data_count to log_data_count + 1.
+  }
 
 	wait 0.
 }

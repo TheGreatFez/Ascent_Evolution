@@ -13,12 +13,15 @@ if HASNODE {
   local max_acc to maxthrust/mass.
   local peri_v to velocityat(ship,time:seconds + eta:periapsis):orbit:mag.
   local delta_time to peri_v/max_acc.
-  warpto(time:seconds + eta:periapsis - 1.15*delta_time).
+  warpto(time:seconds + eta:periapsis - 1.5*delta_time).
   print "Warping closer to Periapsis".
+  wait until warp <= 0.
+  clearscreen.
+  KUniverse:quicksaveto("Spot_Land Test").
 }
-wait until warp <= 0.
-clearscreen.
 GEAR ON.
+
+
 
 function true_alt {
   return altitude - ship:geoposition:terrainheight.
@@ -47,16 +50,15 @@ function Hysteresis {
 }
 
 function Vmax_v {
-	declare parameter buffer_terrain is 0, TouchDownSpeed is 5.
+	declare parameter buffer_terrain is 0, TouchDownSpeed is 1.
 	local V to ship:velocity:orbit.
 	local R to ship:body:position.
 	local Vper to VDOT(VCRS(R,VCRS(V,R)):normalized,V).
 	local AccelCent to (Vper^2)/R:mag.
 	local MaxThrustAccUp to availablethrust/mass.
-	local GravUp to (-1)*(ship:body:mu)/((R:mag)^2).
-	local MaxAccUp to MaxThrustAccUp + GravUp + AccelCent.
+	local MaxAccUp to MaxThrustAccUp - g() + AccelCent.
 	local FPAsurf to 90 - VANG(UP:vector,ship:velocity:surface).
-	local Vmax to sqrt(MAX(0,2*(true_alt() - buffer_terrain)*MaxAccUp - TouchDownSpeed^2)).
+	local Vmax to sqrt(MAX(0,2*(true_alt() - buffer_terrain)*MaxAccUp + TouchDownSpeed^2)).
 	return -Vmax.
 }
 
@@ -69,8 +71,8 @@ function V_accel_inertial {
   return centri_acc - g().
 }
 
-function V_throttle {
-  local Vmax is Vmax_v(0,1).
+local function V_throttle {
+  local Vmax is Vmax_v(-13,0).
   local error is Vmax - verticalspeed.
   local throttle_needed to 0.
   local max_acc is maxthrust/mass.
@@ -87,7 +89,7 @@ function H_vec {
 }
 
 function Vmax_h {
-	declare parameter  buffer_dist is 0.
+	declare parameter  buffer_dist is 1000.
 	local R to ship:body:position.
 	local V to ship:velocity:orbit.
 	local MaxThrustAccHor to availablethrust/mass.
@@ -127,6 +129,23 @@ function H_throttle {
   local throttle_needed is 1 - (0.25*error)/max_acc.
 
   return min(1,max(0,throttle_needed)).
+}
+
+function PN_throttle {
+
+  local Gain to 4.
+
+  local R1 to landing_pos:position.
+  local V1 to ship:velocity:surface.
+  local PN_acc_vec_pre to Gain*VCRS(V1,VCRS(R1,V1)/VDOT(R1,R1)).
+  local PN_acc_vec_norm to PN_acc_vec_pre:normalized.
+  local Inertial_acc to V_accel_inertial*UP:vector.
+
+  local PN_acc_vec to PN_acc_vec_pre - VDOT(Inertial_acc,PN_acc_vec_norm)*PN_acc_vec_norm..
+
+  //- VDOT(Inertial_acc,PN_acc_vec_norm)*PN_acc_vec_norm.
+
+  return (PN_acc_vec*mass)/availablethrust.
 }
 
 function Follow_throttle_func {
@@ -173,7 +192,7 @@ local touchdown_speed to -1.
 local alt_cutoff to 100.
 
 local throttle_hyst to false.
-local throttle_hyst_UL to 75.
+local throttle_hyst_UL to 5.
 local throttle_hyst_LL to 1.
 
 local H_throttle_val to 0.
@@ -198,6 +217,18 @@ set LandingPositionVector:startupdater to { return V(0,0,0).}.
 local SurfaceVelocity to VECDRAW(V(0,0,0),ship:velocity:surface,BLUE,"Surface Velocity",1.0,TRUE,.5).
 set SurfaceVelocity:vectorupdater to { return ship:velocity:surface.}.
 set SurfaceVelocity:startupdater to { return V(0,0,0).}.
+
+local PN_Throttle_Vec to VECDRAW(V(0,0,0),10*PN_throttle(),RED,"PN",1.0,TRUE,.5).
+set PN_Throttle_Vec:vectorupdater to { return 10*PN_throttle().}.
+set PN_Throttle_Vec:startupdater to { return V(0,0,0).}.
+
+local Throttle_Vec_draw to VECDRAW(V(0,0,0),10*throttle_vec,BLUE,"Throttle Vec",1.0,TRUE,.5).
+set Throttle_Vec_draw:vectorupdater to { return 10*throttle_vec.}.
+set Throttle_Vec_draw:startupdater to { return V(0,0,0).}.
+
+local Inertial_Acc_Vec to VECDRAW(V(0,0,0),10*V_accel_inertial()*UP:vector,GREEN,"Inertial Vec",1.0,TRUE,.5).
+set Inertial_Acc_Vec:vectorupdater to { return 10*V_accel_inertial()*UP:vector.}.
+set Inertial_Acc_Vec:startupdater to { return V(0,0,0).}.
 
 local V_speed_check to true.
 local left_over_flag to True.
@@ -249,9 +280,13 @@ until ship:status = "LANDED" {
 
 	local Follow_Mode_Ang to VANG(landing_pos:position,ship:velocity:surface).
 	local Follow_Mode_Dist to VXCL(UP:vector,landing_pos:position):mag/true_alt().
-	if Follow_Mode_Ang < 15 AND Follow_Mode_Dist < 0.1 AND not(Follow_Mode) {
+	//if Follow_Mode_Ang < 15 AND Follow_Mode_Dist < 0.1 AND not(Follow_Mode) {
+	//	set Follow_Mode to True.
+  //  set throttle_hyst to False.
+	//}
+  if PN_throttle():mag < throttle_hyst_LL/100 AND not(Follow_Mode) {
 		set Follow_Mode to True.
-    GEAR ON.
+    set throttle_hyst to False.
 	}
 
 	if groundspeed < 10 AND not(Follow_Mode) {
@@ -259,7 +294,8 @@ until ship:status = "LANDED" {
 	}
 
 	if Follow_Mode {
-		set throttle_vec to UP:vector*V_throttle_val + Follow_throttle_func().
+    //set throttle_vec to UP:vector*V_throttle_val + Follow_throttle_func().
+    set throttle_vec to UP:vector*V_throttle_val + PN_throttle().
 	} else {
 		set throttle_vec to UP:vector*V_throttle_val - H_vec()*H_throttle_val + S_vec()*S_throttle.
 	}
@@ -287,6 +323,8 @@ until ship:status = "LANDED" {
   if Follow_Mode {
     set line_count to line_count + 1.
   	print "F_throttle_val = " +round(100*sqrt(max(0,throttle_vec:mag^2 - V_throttle_val^2)),1) + "%   " at(0,line_count).
+    set line_count to line_count + 1.
+  	print "PN_throttle_val= " +round(100*PN_throttle():mag) + "%   " at(0,line_count).
   } else {
     set line_count to line_count + 1.
   	print "H_throttle_val = " +round(100*(VDOT(H_vec(),throttle_vec)),1) + "%   " at(0,line_count).
@@ -339,4 +377,25 @@ until ship:status = "LANDED" {
 lock throttle to 0.
 unlock steering.
 SAS ON.
-wait 5.
+clearscreen.
+print "Waiting for Settling".
+local settled to False.
+local t_settle_start to time:seconds.
+local t_settle to 0.
+
+local settle_time_min to 3.
+
+until settled {
+  if not(KUNIVERSE:CANQUICKSAVE) {
+    local t_settle_start to time:seconds.
+  }
+  set t_settle to time:seconds - t_settle_start.
+
+  if t_settle > settle_time_min AND KUNIVERSE:CANQUICKSAVE {
+    set settled to true.
+  }
+  local line_count to 1.
+	print "Settled Time Min is " + round(settle_time_min,1) + "sec   " at(0,line_count).
+  set line_count to line_count + 1.
+  print "Settled Time : " + round(t_settle,1) + "sec    " at(0,line_count).
+}
