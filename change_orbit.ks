@@ -1,4 +1,6 @@
 RUNONCEPATH("Library/lib_execnode.ks").
+RUNONCEPATH("Library/lib_OrbitalMechanics_Functions.ks").
+RUNONCEPATH("Library/lib_SetManNode_Velocity.ks").
 
 function Change_LAN_Inc {
 
@@ -96,9 +98,8 @@ function Change_AoP_PerApo {
 	local AoP_eta to ETA_to_theta(AoP_theta).
 	local AoP_timeat to time:seconds + AoP_eta.
 
-	Apoapsis_Set_TimeAt(AoP_timeat,DesiredOrbit).
-	local New_Apo_time to time:seconds + eta:apoapsis.
-	Periapsis_Set_TimeAt(New_Apo_time,DesiredOrbit).
+	AoP_Set_TimeAt(AoP_timeat,DesiredOrbit).
+  ApoPeri_Set(DesiredOrbit).
 	// Debugging Vecdraws
 	//set LAN_VEC_Draw to vecdraw().
 	//set LAN_VEC_Draw:startupdater to { return ship:body:position. }.
@@ -112,64 +113,10 @@ function Change_AoP_PerApo {
 	//set AoP_VEC_Draw:show to true.
 	//set AoP_VEC_Draw:color to RGB(0,255,0).
 
-	wait 1.
+	wait 0.
 }
 
-function FindTheta_Vec {
-
-	parameter test_vector is -ship:body:position.
-
-	local body_pos to ship:body:position.
-	local R to -body_pos.
-	local AngVel_ship to VCRS(R,ship:velocity:orbit):normalized.
-	local theta_test to VANG(test_vector,R).
-	local cross_test to VCRS(R,test_vector):normalized.
-
-	local check_vec to cross_test + AngVel_ship.
-	local theta_ship is ship:orbit:trueanomaly.
-	local theta is theta_ship.
-
-	if check_vec:mag > 1 {
-		set theta to theta_ship + theta_test.
-	} else {
-		set theta to theta_ship - theta_test.
-	}
-
-	if theta < 0 {
-		set theta to 360 + theta.
-	}
-
-	if theta > 360 {
-		set theta to theta - 360.
-	}
-
-	return theta.
-}
-
-function ETA_to_theta {
-
-	parameter theta_test.
-
-	local T_orbit to ship:orbit:period.
-	local theta_ship to ship:orbit:trueanomaly.
-	local e to ship:orbit:eccentricity.
-	local GM to ship:body:mu.
-	local a to ship:orbit:semimajoraxis.
-
-	local EA_ship to 2*ARCTAN((TAN(theta_ship/2))/sqrt((1+e)/(1-e))).
-	local MA_ship to EA_ship*constant:pi/180 - e*SIN(EA_ship).
-	local EA_test to 2*ARCTAN((TAN(theta_test/2))/sqrt((1+e)/(1-e))).
-	local MA_test to EA_test*constant:pi/180 - e*SIN(EA_test).
-	local n to sqrt(GM/(a)^3).
-	local eta_to_testpoint to (MA_test - MA_ship)/n.
-	if eta_to_testpoint < 0 {
-		set eta_to_testpoint to T_orbit + eta_to_testpoint.
-	}
-
-	return eta_to_testpoint.
-}
-
-function Apoapsis_Set_TimeAt {
+function AoP_Set_TimeAt {
 	parameter AoP_timeat, DesiredOrbit.
 
 	local body_pos to ship:body:position.
@@ -183,7 +130,7 @@ function Apoapsis_Set_TimeAt {
 	local R_ap_vec to -1*R_ap*R_aop_vec:normalized.
 
 	local SMA_new to (R_ap + R_aop)/2.
-	local V_aop_speed to vis_via_speed(R_aop-body_radius,SMA_new).
+	local V_aop_speed to vis_via_speed(R_aop,SMA_new).
 	local temp_vec to VCRS(AngVel_ship,R_aop_vec):normalized.
 	local V_aop_new_vec to V_aop_speed*temp_vec.
 
@@ -210,20 +157,41 @@ function Apoapsis_Set_TimeAt {
 	//wait 1.
 }
 
-function Periapsis_Set_TimeAt {
-	parameter New_Apo_time, DesiredOrbit.
+function ApoPeri_Set {
+	parameter DesiredOrbit.
+  local burn_at_apo is true.
+  local New_Apo_time to time:seconds + eta:apoapsis.
+  if ship:orbit:trueanomaly > 90 AND ship:orbit:trueanomaly < 270 {
+    set New_Apo_time to time:seconds + eta:periapsis.
+    set burn_at_apo to false.
+  }
 
 	local body_pos to ship:body:position.
-	local R to -body_pos.
 	local body_radius to ship:body:radius.
 	local R_per_new to DesiredOrbit["PER"] + body_radius.
-	local R_ap_new to positionat(ship,New_Apo_time) + R.
-	local SMA_new to (R_ap_new:mag + R_per_new)/2.
-	local V_ap_new_speed to vis_via_speed(R_ap_new:mag-body_radius,SMA_new).
-	local V_ap_current_speed to velocityat(ship,New_Apo_time):orbit:mag.
+	local R_apo_new to DesiredOrbit["APO"] + body_radius.
+  local R_per_old to periapsis + body_radius.
+	local R_apo_old to apoapsis + body_radius.
+  local eta_to_apo to time:seconds + eta:apoapsis.
+	local V_apo_current_speed to velocityat(ship,eta_to_apo):orbit:mag.
+  local eta_to_per to time:seconds + eta:periapsis.
+	local V_per_current_speed to velocityat(ship,eta_to_per):orbit:mag.
 
-	local delta_v_node to V_ap_new_speed - V_ap_current_speed.
-	local PER_node to node(New_Apo_time,0,0,delta_v_node).
+  local Burn_Node_time is time:seconds.
+  local delta_v_node to 0.
+  if burn_at_apo {
+    local SMA_new to (R_apo_old + R_per_new)/2.
+    local V_apo_new_speed to vis_via_speed(R_apo_old,SMA_new).
+    set delta_v_node to V_apo_new_speed - V_apo_current_speed.
+    set Burn_Node_time to eta_to_apo.
+  } else {
+    local SMA_new to (R_apo_new + R_per_old)/2.
+    local V_per_new_speed to vis_via_speed(R_per_old,SMA_new).
+    set delta_v_node to V_per_new_speed - V_per_current_speed.
+    set Burn_Node_time to eta_to_per.
+  }
+
+	local PER_node to node(Burn_Node_time,0,0,delta_v_node).
 	add PER_node.
 
 	if nextnode:burnvector:mag > 0.05 {
@@ -234,29 +202,7 @@ function Periapsis_Set_TimeAt {
   }
 }
 
-function vis_via_speed {
-	parameter R, a is ship:orbit:semimajoraxis.
-	local R_val to ship:body:radius + R.
-	return sqrt(ship:body:mu*(2/R_val - 1/a)).
-}
-
-function SetNode_BurnVector {
-	parameter timeat,V_New.
-
-	local V_timeat to velocityat(ship,timeat):orbit.
-
-	local node_normal_vec to vcrs(ship:body:position,ship:velocity:orbit):normalized.
-	local node_prograde_vec to V_timeat:normalized.
-	local node_radial_vec to VCRS(node_normal_vec,node_prograde_vec).
-
-	local burn_vector to (V_New - V_timeat).
-	local burn_prograde to VDOT(node_prograde_vec,burn_vector).
-	local burn_normal to VDOT(node_normal_vec,burn_vector).
-	local burn_radial to VDOT(node_radial_vec,burn_vector).
-
-	return NODE(timeat,burn_radial,burn_normal,burn_prograde).
-}
-
+// Main Loop
 local LAN_ship to ship:orbit:LAN.
 local INC_ship to ship:orbit:inclination.
 local AOP_ship to ship:orbit:argumentofperiapsis.
@@ -277,28 +223,6 @@ wait 2.
 clearscreen.
 clearvecdraws().
 for n in allnodes { remove n.}
-local tolerance_angle to 0.01.
-local LAN_diff to abs(DesiredOrbit["LAN"] - LAN_ship).
-local INC_diff to abs(DesiredOrbit["INC"] - INC_ship).
-
-if  not(LAN_diff < tolerance_angle AND INC_diff < tolerance_angle) {
-  Change_LAN_Inc(DesiredOrbit).
-}
-local AOP_ship to ship:orbit:argumentofperiapsis.
-local PER_ship to ship:orbit:periapsis.
-local APO_ship to ship:orbit:apoapsis.
-
-local AOP_diff to abs(AOP_ship - DesiredOrbit["AOP"]).
-local APO_diff to abs(APO_ship - DesiredOrbit["APO"]).
-local PER_diff to abs(PER_ship - DesiredOrbit["PER"]).
-
-local AOP_diff_percent to 100*(1 - AOP_diff/DesiredOrbit["AOP"]).
-local APO_diff_percent to 100*(APO_diff/DesiredOrbit["APO"]).
-local PER_diff_percent to 100*(PER_diff/DesiredOrbit["PER"]).
-
-local tolerance_percent to 0.05.
-
-if not(AOP_diff_percent < tolerance_percent AND APO_diff_percent < tolerance_percent AND PER_diff_percent < tolerance_percent) {
-	Change_AoP_PerApo(DesiredOrbit).
-}
+Change_LAN_Inc(DesiredOrbit).
+Change_AoP_PerApo(DesiredOrbit).
 clearvecdraws().

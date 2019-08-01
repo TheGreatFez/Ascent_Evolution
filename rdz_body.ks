@@ -1,6 +1,6 @@
 // This script calculates a Maneuver Node to intercept a target body. It is assumed both target and ship are in near circular orbits
 @LAZYGLOBAL OFF.
-parameter target_periapsis is target:radius/2.
+parameter skip_target_peri is true, target_periapsis is target:radius/2.
 
 clearscreen.
 for node in allnodes {remove node.}
@@ -172,7 +172,7 @@ local i is 1.
 
 clearscreen.
 
-until i >= 100 OR dont_start {
+until i >= 100 OR dont_start OR skip_target_peri {
 
   local diff1 to abs(test_periapsis - target_periapsis).
 	set Delta_V to Delta_V + delta*delta_dir.
@@ -211,7 +211,7 @@ until i >= 100 OR dont_start {
 	print "test_periapsis = " + round(test_periapsis,2) at (0,6).
 	print "target_periapsis = " + target_periapsis at (0,7).
   // Uncomment to slow down iteration process for visualization
-  //wait 1.
+  wait 1.
 
 }
 clearscreen.

@@ -14,9 +14,14 @@ function ExecuteNode {
 	print "Warping to Burn Point".
 	print "Burn Starts at T-minus " + round(BurnTime,2) + "secs   ".
 	warpto(time:seconds + nextnode:eta - BurnTime/2 - 10).
-  local test_alt is round(altitude/1000)*1000.
-  wait 0.5.
-  wait until warp <= 0.
+  local test_alt is altitude.
+  until warp > 0 {
+    set test_alt to round(test_alt + 1000,-3).
+    print "Waiting to reach " + test_alt "m".
+    wait until altitude > test_alt.
+    warpto(time:seconds + nextnode:eta - BurnTime/2 - 10).
+  }
+	wait until warp <= 0.
 
 	clearscreen.
   local prev_dv to Delta_V.

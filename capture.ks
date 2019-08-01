@@ -11,6 +11,10 @@ function CaptureVelVec {
   local vel_speed to sqrt(ship:body:MU*(2/R1 - 1/a_cap)).
 
   local temp_vec to VCRS(-1*ship:body:position,ship:velocity:orbit).
+  // Prograde Check
+  if VDOT(V(0,-1,0),temp_vec) < 0 {
+    set temp_vec to -temp_vec.
+  }
   local vel_dir to VCRS(temp_vec,-1*ship:body:position):normalized.
 
   return vel_dir*vel_speed.

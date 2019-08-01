@@ -131,9 +131,9 @@ function H_throttle {
   return min(1,max(0,throttle_needed)).
 }
 
-function PN_throttle {
+local function PN_throttle {
 
-  local Gain to 4.
+  local Gain to 5.
 
   local R1 to landing_pos:position.
   local V1 to ship:velocity:surface.

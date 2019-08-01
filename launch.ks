@@ -9,7 +9,7 @@ set ship:control:pilotmainthrottle to 0.
 // Main Inputs
 local TargetOrbit is 400000. // The target altitude of our parking orbit.
 
-local PitchProgram_Select to 3.
+local PitchProgram_Select to 2.
 local log_data to true.
 local log_data_dt to 0.5.
 local log_file_name to "".
@@ -49,6 +49,10 @@ if log_data{
     set log_file_name to ship_name + "_" + "Jerk.csv".
     deletepath(log_file_name).
   }
+  if PitchProgram_Select = 4 {
+    set log_file_name to ship_name + "_" + "PitchSelect.csv".
+    deletepath(log_file_name).
+  }
   log log_var_names to log_file_name.
 }
 
@@ -81,29 +85,33 @@ RUNONCEPATH("Library/lib_VerticalAccelCalcs.ks").
 RUNONCEPATH("Library/lib_MachNumber.ks").
 RUNONCEPATH("Library/lib_BisectionSolver.ks").
 RUNONCEPATH("Library/lib_execnode.ks").
+RUNONCEPATH("Library/lib_OrbitalMechanics_Functions.ks").
 
 local v_accel_func to makeDerivator_N(0,10).
 local v_jerk_func to makeDerivator_N(0,20).
 // Functions
 
-function PitchProgram_Sqrt {
-	parameter switch_alt is 250.
-	local pitch_ang to 0.
-	local FollowPitch to false.
-	local scale_factor to 1.0.
-	local alt_diff is scale_factor*ship:body:atm:height - switch_alt.
+function makePitchProgram_Sqrt {
+  parameter switch_alt is 100, end_alt is 1.0.
 
-	local SrfProg_pitch to 90 - VANG(UP:vector,srfprograde:vector).
-	local ObtProg_pitch to 90 - VANG(UP:vector,prograde:vector).
+  return {
+    local pitch_ang to 0.
+  	local FollowPitch to false.
+  	local alt_diff is end_alt - switch_alt.
 
-	if altitude >= switch_alt {
-		set pitch_ang to max(0,min(90,90*sqrt((altitude - switch_alt)/alt_diff))).
-		if ObtProg_pitch > pitch_ang AND FollowPitch {
-			set pitch_ang to ObtProg_pitch.
-		}
-	}
+  	local SrfProg_pitch to 90 - VANG(UP:vector,srfprograde:vector).
+  	local ObtProg_pitch to 90 - VANG(UP:vector,prograde:vector).
 
-	return pitch_ang.
+  	if altitude >= switch_alt {
+  		set pitch_ang to max(0,min(90,90*sqrt((altitude - switch_alt)/alt_diff))).
+  		if ObtProg_pitch > pitch_ang AND FollowPitch {
+  			set pitch_ang to ObtProg_pitch.
+  		}
+  	}
+
+  	return pitch_ang.
+  }.
+
 }
 
 function PitchProgram_Rate {
@@ -185,6 +193,23 @@ function T2Alt_Score {
   return ship:body:atm:height - AltIntegration_Jerk(time_input).
 }
 
+function makeAltAtCutOff_Score {
+  parameter apo_desired,peri_desired is ship:body:atm:height.
+  local SMA is (apo_desired + peri_desired)/2 + ship:body:radius.
+  local v_final is vis_via_speed(peri_desired + ship:body:radius,SMA).
+  return {
+    parameter pitch.
+    local max_acc is availablethrust/mass.
+
+    local acc_h is max(0.001,max_acc*sin(pitch)).
+    local acc_v is max_acc*cos(pitch) + V_accel_inertial().
+
+    local time_cutoff is max(0,(v_final - VXCL(UP:vector,velocity:orbit):mag)/acc_h).
+
+    return -peri_desired + altitude + verticalspeed*time_cutoff + 0.5*acc_v*time_cutoff^2.
+  }.
+}
+
 function Calculate_DeltaV {
 	parameter DeltaV_Data.
 
@@ -215,15 +240,9 @@ function circular_speed {
 	return sqrt(ship:body:mu/R_val).
 }
 
-function vis_via_speed {
-	parameter R, a is ship:orbit:semimajoraxis.
-	local R_val to ship:body:radius + R.
-	return sqrt(ship:body:mu*(2/R_val - 1/a)).
-}
-
 function Circularize_DV_Calc{
 	local Vapo_cir to circular_speed(apoapsis).
-	local Delta_V to  Vapo_cir - vis_via_speed(apoapsis).
+	local Delta_V to  Vapo_cir - vis_via_speed(apoapsis + ship:body:radius).
 	local CirPer to NODE(TIME:seconds + eta:apoapsis, 0, 0, Delta_V).
 	ADD CirPer.
 	return CirPer:deltav:mag.
@@ -233,7 +252,7 @@ function inst_az {
 	parameter	inc. // target inclination
 
 	// find orbital velocity for a circular orbit at the current altitude.
-	local V_orb is max(ship:velocity:orbit:mag + 1,sqrt( body:mu / ( ship:altitude + body:radius))).
+	local V_orb is max(ship:velocity:orbit:mag + 100,sqrt( body:mu / ( ship:altitude + body:radius))).
 
 	// Use the current orbital velocity
 	//local V_orb is ship:velocity:orbit:mag.
@@ -248,7 +267,7 @@ function inst_az {
 	local V_star is heading(az_orb, 0)*v(0, 0, V_orb).
 
 	// find horizontal component of current orbital velocity vector
-	local V_ship_h is ship:velocity:orbit - vdot(ship:velocity:orbit, up:vector:normalized)*up:vector:normalized.
+	local V_ship_h is ship:velocity:orbit - vdot(ship:velocity:orbit, up:vector)*up:vector.
 
 	// calculate difference between desired orbital vector and current (this is the direction we go)
 	local V_corr is V_star - V_ship_h.
@@ -265,23 +284,25 @@ function inst_az {
 // Ignition
 local pitch_ang to 0.
 local inc_des   to 0. // Desired inclination
-local compass to inst_az(inc_des).
+local compass to 90. //inst_az(inc_des).
 lock throttle to 1.
 lock steering to lookdirup(heading(compass,90-pitch_ang):vector,ship:facing:upvector).
 stage.
 
 // Basic Staging:
-local current_max to maxthrust.
-when maxthrust < current_max OR availablethrust = 0 then {
+local current_max to ship:maxthrustat(0).
+when ship:maxthrustat(0) < current_max OR availablethrust = 0 then {
 	lock throttle to 0.
 	stage.
 	lock throttle to 1.
-	set current_max to maxthrust.
+	set current_max to ship:maxthrustat(0).
 	preserve.
 }
 
 // Pitch Program Parameters: Sqrt
-local switch_alt is altitude.
+local switch_alt is altitude + 100.
+local end_alt is ship:body:atm:height + 115000.
+local SqrtPitch_controller is makePitchProgram_Sqrt(switch_alt,end_alt).
 
 // Pitch Program Parameters: Rate
 local min_VS is 10.
@@ -297,6 +318,12 @@ Pitch_Data:ADD("Alt_Final",ship:body:atm:height).
 local T2Alt_Solver to makeBiSectSolver(T2Alt_Score@,100,101).
 local T2Alt_TestPoints to T2Alt_Solver:call().
 local pitch_controller to makePitch_rate_function(10).
+
+// Pitch Program Parameters: Pitch Select
+
+local AltAtCutOff_Score to makeAltAtCutOff_Score(TargetOrbit).
+local AltAtCutOff_Solver to makeBiSectSolver(AltAtCutOff_Score@,88,89).
+local AltAtCutOff_TestPoints to AltAtCutOff_Solver:call().
 
 // Run Mode Variables
 local AscentStage is 1.
@@ -328,7 +355,7 @@ until AscentStage = 2 AND altitude > ship:body:ATM:height {
 
   if AscentStage = 1 {
     if PitchProgram_Select = 1 {
-      set pitch_ang to PitchProgram_Sqrt(switch_alt).
+      set pitch_ang to SqrtPitch_controller().
     }
     if PitchProgram_Select = 2 {
       set Pitch_Data to PitchProgram_Rate(Pitch_Data).
@@ -338,6 +365,10 @@ until AscentStage = 2 AND altitude > ship:body:ATM:height {
       set T2Alt_TestPoints to T2Alt_Solver:call().
       set pitch_ang to pitch_controller:call(T2Alt_TestPoints[2][0]).
     }
+    if PitchProgram_Select = 4 {
+      set AltAtCutOff_TestPoints to AltAtCutOff_Solver:call().
+      set pitch_ang to AltAtCutOff_TestPoints[2][0].
+    }
   }
 
   if AscentStage = 2 {
@@ -345,7 +376,7 @@ until AscentStage = 2 AND altitude > ship:body:ATM:height {
   }
 
   set FPA to VANG(UP:vector,ship:velocity:surface).
-	set compass to inst_az(inc_des).
+	set compass to 90. //inst_az(inc_des).
 
 	// Variable Printout
 	set line to 1.
@@ -376,6 +407,14 @@ until AscentStage = 2 AND altitude > ship:body:ATM:height {
     print "Vert Jerk   = " + round(getVertJerk(),3) + "     " at(0,line).
   	set line to line + 1.
     print "Time to Alt = " + round(T2Alt_TestPoints[2][0],2) + "     " at(0,line).
+  	set line to line + 1.
+  }
+  if PitchProgram_Select = 4 {
+    print "Pitch Program: Pitch Select                     " at(0,line).
+    set line to line + 1.
+    print "Alt Score   = " + round(AltAtCutOff_Score(AltAtCutOff_TestPoints[2][0]),2) + "     " at(0,line).
+  	set line to line + 1.
+    print "Time to Alt = " + round(AltAtCutOff_TestPoints[2][0],2) + "     " at(0,line).
   	set line to line + 1.
   }
   print "Gamma         = " + round(FPA,2) + "   " at(0,line).
